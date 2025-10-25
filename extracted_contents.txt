@@ -1,0 +1,933 @@
+--- File: .\package.json ---
+{
+  "name": "vite-react-typescript-starter",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "framer-motion": "^12.23.24",
+    "lucide-react": "^0.344.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.18",
+    "eslint": "^9.9.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.11",
+    "globals": "^15.9.0",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.5.3",
+    "typescript-eslint": "^8.3.0",
+    "vite": "^5.4.2"
+  }
+}
+
+
+--- File: .\src\App.tsx ---
+import { useState } from 'react';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { AnimatedBlob } from './components/AnimatedBlob';
+import { ThemeToggle } from './components/ThemeToggle';
+import { LandingPage } from './components/LandingPage';
+import { RoleSelector } from './components/RoleSelector';
+import { InterviewPanel } from './components/InterviewPanel';
+
+type View = 'landing' | 'role-selector' | 'interview';
+
+function App() {
+  const [currentView, setCurrentView] = useState<View>('landing');
+  const [selectedRole, setSelectedRole] = useState<string>('');
+
+  const handleStartInterview = () => {
+    setCurrentView('role-selector');
+  };
+
+  const handleSelectRole = (role: string) => {
+    setSelectedRole(role);
+    setCurrentView('interview');
+  };
+
+  const handleBackToRoleSelector = () => {
+    setCurrentView('role-selector');
+  };
+
+  const handleBackToLanding = () => {
+    setCurrentView('landing');
+    setSelectedRole('');
+  };
+
+  return (
+    <ThemeProvider>
+      <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-500">
+        <AnimatedBlob position="top-left" />
+        <AnimatedBlob position="bottom-right" />
+
+        <ThemeToggle />
+
+        <div className="relative z-10">
+          {currentView === 'landing' && (
+            <LandingPage onStartInterview={handleStartInterview} />
+          )}
+          {currentView === 'role-selector' && (
+            <RoleSelector
+              onSelectRole={handleSelectRole}
+              onBack={handleBackToLanding}
+            />
+          )}
+          {currentView === 'interview' && (
+            <InterviewPanel
+              role={selectedRole}
+              onBack={handleBackToRoleSelector}
+            />
+          )}
+        </div>
+      </div>
+    </ThemeProvider>
+  );
+}
+
+export default App;
+
+
+--- File: .\src\index.css ---
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+.will-change-transform {
+  will-change: transform;
+}
+
+
+--- File: .\src\main.tsx ---
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App.tsx';
+import './index.css';
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+
+
+--- File: .\src\theme.ts ---
+export const theme = {
+  light: {
+    primary: '#3B82F6',
+    secondary: '#8B5CF6',
+    accent: '#06B6D4',
+    background: '#F8FAFC',
+    blobGradient1: 'from-blue-400 via-cyan-400 to-blue-500',
+    blobGradient2: 'from-violet-400 via-purple-400 to-indigo-500',
+    glass: 'rgba(255, 255, 255, 0.1)',
+    glassBorder: 'rgba(255, 255, 255, 0.2)',
+    text: '#1E293B',
+    textSecondary: '#475569',
+    glowColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  dark: {
+    primary: '#60A5FA',
+    secondary: '#A78BFA',
+    accent: '#22D3EE',
+    background: '#0F172A',
+    blobGradient1: 'from-blue-600 via-cyan-600 to-blue-700',
+    blobGradient2: 'from-violet-600 via-purple-600 to-indigo-700',
+    glass: 'rgba(15, 23, 42, 0.4)',
+    glassBorder: 'rgba(255, 255, 255, 0.1)',
+    text: '#F1F5F9',
+    textSecondary: '#CBD5E1',
+    glowColor: 'rgba(96, 165, 250, 0.2)',
+  },
+};
+
+export type Theme = typeof theme.light;
+
+
+--- File: .\src\vite-env.d.ts ---
+/// <reference types="vite/client" />
+
+
+--- File: .\src\components\AIAvatar.tsx ---
+import { motion } from 'framer-motion';
+import { useTheme } from '../contexts/ThemeContext';
+
+interface AIAvatarProps {
+  isListening: boolean;
+  isSpeaking: boolean;
+}
+
+export function AIAvatar({ isListening, isSpeaking }: AIAvatarProps) {
+  const { mode } = useTheme();
+
+  const getAnimationState = () => {
+    if (isSpeaking) {
+      return {
+        scale: [1, 1.15, 1],
+        opacity: [0.8, 1, 0.8],
+      };
+    }
+    if (isListening) {
+      return {
+        scale: [1, 1.05, 1],
+        opacity: [0.6, 0.9, 0.6],
+      };
+    }
+    return {
+      scale: 1,
+      opacity: 0.6,
+    };
+  };
+
+  return (
+    <div className="relative w-48 h-48 mx-auto">
+      <motion.div
+        className={`absolute inset-0 rounded-full bg-gradient-to-br ${
+          mode === 'dark'
+            ? 'from-blue-600 via-cyan-600 to-purple-600'
+            : 'from-blue-400 via-cyan-400 to-purple-400'
+        } blur-2xl`}
+        animate={getAnimationState()}
+        transition={{
+          duration: isSpeaking ? 0.5 : isListening ? 1.5 : 0,
+          repeat: (isSpeaking || isListening) ? Infinity : 0,
+          ease: 'easeInOut',
+        }}
+      />
+
+      <motion.div
+        className={`absolute inset-4 rounded-full bg-gradient-to-br ${
+          mode === 'dark'
+            ? 'from-blue-500 via-cyan-500 to-purple-500'
+            : 'from-blue-300 via-cyan-300 to-purple-300'
+        }`}
+        animate={{
+          scale: isSpeaking ? [1, 1.1, 1] : isListening ? [1, 1.05, 1] : 1,
+        }}
+        transition={{
+          duration: isSpeaking ? 0.3 : isListening ? 1 : 0,
+          repeat: (isSpeaking || isListening) ? Infinity : 0,
+          ease: 'easeInOut',
+        }}
+      />
+
+      <motion.div
+        className="absolute inset-8 rounded-full bg-white/20 backdrop-blur-xl border border-white/30 flex items-center justify-center"
+        animate={{
+          boxShadow: isSpeaking
+            ? [
+                '0 0 20px rgba(59, 130, 246, 0.5)',
+                '0 0 40px rgba(6, 182, 212, 0.8)',
+                '0 0 20px rgba(59, 130, 246, 0.5)',
+              ]
+            : isListening
+            ? ['0 0 15px rgba(59, 130, 246, 0.3)', '0 0 25px rgba(6, 182, 212, 0.5)', '0 0 15px rgba(59, 130, 246, 0.3)']
+            : '0 0 10px rgba(59, 130, 246, 0.2)',
+        }}
+        transition={{
+          duration: isSpeaking ? 0.4 : isListening ? 1.2 : 0,
+          repeat: (isSpeaking || isListening) ? Infinity : 0,
+          ease: 'easeInOut',
+        }}
+      >
+        <svg className="w-16 h-16" viewBox="0 0 100 100" fill="none">
+          <motion.circle
+            cx="50"
+            cy="50"
+            r="20"
+            stroke="currentColor"
+            strokeWidth="3"
+            className={mode === 'dark' ? 'text-cyan-400' : 'text-blue-600'}
+            animate={{
+              r: isSpeaking ? [20, 25, 20] : isListening ? [20, 22, 20] : 20,
+            }}
+            transition={{
+              duration: isSpeaking ? 0.4 : isListening ? 1 : 0,
+              repeat: (isSpeaking || isListening) ? Infinity : 0,
+              ease: 'easeInOut',
+            }}
+          />
+          {[0, 1, 2].map((i) => (
+            <motion.circle
+              key={i}
+              cx="50"
+              cy="50"
+              r="20"
+              stroke="currentColor"
+              strokeWidth="2"
+              className={mode === 'dark' ? 'text-cyan-400' : 'text-blue-600'}
+              initial={{ r: 20, opacity: 0.8 }}
+              animate={{
+                r: isSpeaking || isListening ? [20, 40] : 20,
+                opacity: isSpeaking || isListening ? [0.8, 0] : 0.8,
+              }}
+              transition={{
+                duration: 1.5,
+                repeat: (isSpeaking || isListening) ? Infinity : 0,
+                delay: i * 0.5,
+                ease: 'easeOut',
+              }}
+            />
+          ))}
+        </svg>
+      </motion.div>
+    </div>
+  );
+}
+
+
+--- File: .\src\components\AnimatedBlob.tsx ---
+import { motion } from 'framer-motion';
+import { useTheme } from '../contexts/ThemeContext';
+
+interface AnimatedBlobProps {
+  position: 'top-left' | 'bottom-right';
+  size?: string;
+}
+
+export function AnimatedBlob({ position, size = '600px' }: AnimatedBlobProps) {
+  const { mode } = useTheme();
+
+  const gradient = position === 'top-left'
+    ? mode === 'dark'
+      ? 'from-blue-600 via-cyan-600 to-blue-700'
+      : 'from-blue-400 via-cyan-400 to-blue-500'
+    : mode === 'dark'
+      ? 'from-violet-600 via-purple-600 to-indigo-700'
+      : 'from-violet-400 via-purple-400 to-indigo-500';
+
+  const positionClasses = position === 'top-left'
+    ? '-top-48 -left-48'
+    : '-bottom-48 -right-48';
+
+  return (
+    <motion.div
+      className={`absolute ${positionClasses} rounded-full bg-gradient-to-br ${gradient} opacity-40 blur-3xl will-change-transform`}
+      style={{ width: size, height: size }}
+      animate={{
+        scale: [1, 1.2, 1],
+        x: [0, 30, 0],
+        y: [0, -30, 0],
+        rotate: [0, 90, 0],
+      }}
+      transition={{
+        duration: 20,
+        repeat: Infinity,
+        ease: 'easeInOut',
+      }}
+    />
+  );
+}
+
+
+--- File: .\src\components\GlassCard.tsx ---
+import { motion } from 'framer-motion';
+import { ReactNode } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
+
+interface GlassCardProps {
+  children: ReactNode;
+  className?: string;
+  hover?: boolean;
+}
+
+export function GlassCard({ children, className = '', hover = false }: GlassCardProps) {
+  const { mode } = useTheme();
+
+  const bgColor = mode === 'dark'
+    ? 'bg-slate-900/40'
+    : 'bg-white/10';
+
+  const borderColor = mode === 'dark'
+    ? 'border-white/10'
+    : 'border-white/20';
+
+  return (
+    <motion.div
+      className={`${bgColor} backdrop-blur-xl rounded-2xl border ${borderColor} shadow-2xl ${className}`}
+      whileHover={hover ? { scale: 1.02, y: -4 } : undefined}
+      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+
+--- File: .\src\components\InterviewPanel.tsx ---
+import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { Video, VideoOff, Mic, MicOff, Play, Square, RotateCcw, X, ChevronLeft } from 'lucide-react';
+import { GlassCard } from './GlassCard';
+import { AIAvatar } from './AIAvatar';
+import { useTheme } from '../contexts/ThemeContext';
+
+interface InterviewPanelProps {
+  role: string;
+  onBack: () => void;
+}
+
+export function InterviewPanel({ role, onBack }: InterviewPanelProps) {
+  const { mode } = useTheme();
+  const textColor = mode === 'dark' ? 'text-slate-100' : 'text-slate-900';
+  const textSecondary = mode === 'dark' ? 'text-slate-300' : 'text-slate-600';
+
+  const [isInterviewStarted, setIsInterviewStarted] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isMicOn, setIsMicOn] = useState(false);
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [isAIListening, setIsAIListening] = useState(false);
+  const [timer, setTimer] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const roleName = role.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
+  useEffect(() => {
+    let interval: number;
+    if (isInterviewStarted) {
+      interval = setInterval(() => {
+        setTimer(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isInterviewStarted]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const toggleCamera = async () => {
+    if (!isCameraOn) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        streamRef.current = stream;
+        setIsCameraOn(true);
+      } catch (err) {
+        console.error('Error accessing camera:', err);
+      }
+    } else {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      setIsCameraOn(false);
+    }
+  };
+
+  const toggleMic = () => {
+    setIsMicOn(!isMicOn);
+  };
+
+  const startInterview = () => {
+    setIsInterviewStarted(true);
+    setTimer(0);
+    setIsAISpeaking(true);
+    setTimeout(() => {
+      setIsAISpeaking(false);
+      setIsAIListening(true);
+    }, 3000);
+  };
+
+  const endInterview = () => {
+    setIsInterviewStarted(false);
+    setIsAISpeaking(false);
+    setIsAIListening(false);
+    setTimer(0);
+  };
+
+  const retryInterview = () => {
+    endInterview();
+    setTimeout(startInterview, 500);
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen px-6 py-12">
+      <GlassCard className="max-w-7xl w-full p-8 md:p-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="flex items-center justify-between mb-8">
+            <motion.button
+              onClick={onBack}
+              className={`flex items-center gap-2 ${textSecondary} hover:${textColor} transition-colors`}
+              whileHover={{ x: -4 }}
+            >
+              <ChevronLeft className="w-5 h-5" />
+              Back
+            </motion.button>
+
+            <div className={`text-3xl font-mono font-bold ${textColor}`}>
+              {formatTime(timer)}
+            </div>
+          </div>
+
+          <h2 className={`text-3xl md:text-4xl font-bold mb-2 ${textColor} text-center`}>
+            {roleName} Interview
+          </h2>
+          <p className={`${textSecondary} text-center mb-8`}>
+            {isInterviewStarted ? 'Interview in progress...' : 'Get ready to start your interview'}
+          </p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <div>
+              <GlassCard className="p-8">
+                <h3 className={`text-lg font-semibold mb-6 ${textColor} text-center`}>AI Interviewer</h3>
+                <AIAvatar isListening={isAIListening} isSpeaking={isAISpeaking} />
+                <div className="mt-6 text-center">
+                  <motion.div
+                    className={`inline-block px-4 py-2 rounded-full text-sm font-medium ${
+                      isAISpeaking
+                        ? 'bg-green-500/20 text-green-400'
+                        : isAIListening
+                        ? 'bg-blue-500/20 text-blue-400'
+                        : 'bg-slate-500/20 text-slate-400'
+                    }`}
+                    animate={{ opacity: [0.6, 1, 0.6] }}
+                    transition={{
+                      duration: 2,
+                      repeat: (isAISpeaking || isAIListening) ? Infinity : 0,
+                    }}
+                  >
+                    {isAISpeaking ? 'Speaking...' : isAIListening ? 'Listening...' : 'Idle'}
+                  </motion.div>
+                </div>
+              </GlassCard>
+            </div>
+
+            <div>
+              <GlassCard className="p-8">
+                <h3 className={`text-lg font-semibold mb-6 ${textColor} text-center`}>Your Video</h3>
+                <div className="relative aspect-video bg-slate-900/50 rounded-xl overflow-hidden">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover ${!isCameraOn ? 'hidden' : ''}`}
+                  />
+                  {!isCameraOn && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <VideoOff className="w-16 h-16 text-slate-500" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-center gap-4 mt-6">
+                  <motion.button
+                    onClick={toggleCamera}
+                    className={`p-4 rounded-full ${
+                      isCameraOn ? 'bg-blue-500 text-white' : 'bg-white/10 text-slate-400'
+                    } backdrop-blur-sm border border-white/20`}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+                  </motion.button>
+                  <motion.button
+                    onClick={toggleMic}
+                    className={`p-4 rounded-full ${
+                      isMicOn ? 'bg-blue-500 text-white' : 'bg-white/10 text-slate-400'
+                    } backdrop-blur-sm border border-white/20`}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {isMicOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                  </motion.button>
+                </div>
+              </GlassCard>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-4">
+            {!isInterviewStarted ? (
+              <motion.button
+                onClick={startInterview}
+                className="px-8 py-4 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold text-lg shadow-lg flex items-center gap-2"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Play className="w-5 h-5" />
+                Start Interview
+              </motion.button>
+            ) : (
+              <>
+                <motion.button
+                  onClick={endInterview}
+                  className="px-8 py-4 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold text-lg shadow-lg flex items-center gap-2"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Square className="w-5 h-5" />
+                  End Interview
+                </motion.button>
+                <motion.button
+                  onClick={retryInterview}
+                  className={`px-8 py-4 rounded-xl ${
+                    mode === 'dark' ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-900/10 hover:bg-slate-900/20'
+                  } ${textColor} font-semibold text-lg backdrop-blur-sm border ${
+                    mode === 'dark' ? 'border-white/20' : 'border-slate-900/20'
+                  } flex items-center gap-2`}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <RotateCcw className="w-5 h-5" />
+                  Retry
+                </motion.button>
+              </>
+            )}
+            <motion.button
+              onClick={onBack}
+              className={`px-8 py-4 rounded-xl ${
+                mode === 'dark' ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-900/10 hover:bg-slate-900/20'
+              } ${textColor} font-semibold text-lg backdrop-blur-sm border ${
+                mode === 'dark' ? 'border-white/20' : 'border-slate-900/20'
+              } flex items-center gap-2`}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <X className="w-5 h-5" />
+              Exit
+            </motion.button>
+          </div>
+        </motion.div>
+      </GlassCard>
+    </div>
+  );
+}
+
+
+--- File: .\src\components\LandingPage.tsx ---
+import { motion } from 'framer-motion';
+import { Sparkles, Target, Brain } from 'lucide-react';
+import { GlassCard } from './GlassCard';
+import { useTheme } from '../contexts/ThemeContext';
+
+interface LandingPageProps {
+  onStartInterview: () => void;
+}
+
+export function LandingPage({ onStartInterview }: LandingPageProps) {
+  const { mode } = useTheme();
+  const textColor = mode === 'dark' ? 'text-slate-100' : 'text-slate-900';
+  const textSecondary = mode === 'dark' ? 'text-slate-300' : 'text-slate-600';
+
+  return (
+    <div className="flex items-center justify-center min-h-screen px-6 py-12">
+      <GlassCard className="max-w-5xl w-full p-12 md:p-16">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="text-center"
+        >
+          <motion.div
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+            className="inline-flex items-center justify-center mb-6"
+          >
+            <div className="relative">
+              <motion.div
+                animate={{
+                  scale: [1, 1.2, 1],
+                  opacity: [0.5, 0.8, 0.5],
+                }}
+                transition={{
+                  duration: 3,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }}
+                className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full blur-2xl"
+              />
+              <Brain className={`w-16 h-16 ${mode === 'dark' ? 'text-cyan-400' : 'text-blue-600'} relative z-10`} />
+            </div>
+          </motion.div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+            className={`text-5xl md:text-7xl font-bold mb-6 ${textColor}`}
+            style={{ fontFamily: 'system-ui, -apple-system, sans-serif', letterSpacing: '-0.02em' }}
+          >
+            AI Interview Coach
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.6 }}
+            className={`text-xl md:text-2xl mb-12 ${textSecondary} max-w-3xl mx-auto leading-relaxed`}
+          >
+            Practice real interviews with an AI HR that listens, speaks, and scores you.
+            Master your next interview with intelligent feedback and personalized coaching.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.6 }}
+            className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16"
+          >
+            <motion.button
+              onClick={onStartInterview}
+              className="group relative px-8 py-4 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-lg shadow-lg overflow-hidden"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-blue-500"
+                initial={{ x: '100%' }}
+                whileHover={{ x: 0 }}
+                transition={{ duration: 0.3 }}
+              />
+              <span className="relative z-10 flex items-center gap-2">
+                <Sparkles className="w-5 h-5" />
+                Start Interview
+              </span>
+            </motion.button>
+
+            <motion.button
+              className={`px-8 py-4 rounded-xl ${mode === 'dark' ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-900/10 hover:bg-slate-900/20'} ${textColor} font-semibold text-lg backdrop-blur-sm border ${mode === 'dark' ? 'border-white/20' : 'border-slate-900/20'}`}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              View Dashboard
+            </motion.button>
+
+            <motion.button
+              className={`px-8 py-4 rounded-xl ${mode === 'dark' ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-900/10 hover:bg-slate-900/20'} ${textColor} font-semibold text-lg backdrop-blur-sm border ${mode === 'dark' ? 'border-white/20' : 'border-slate-900/20'}`}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              Learn More
+            </motion.button>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7, duration: 0.8 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-6"
+          >
+            {[
+              { icon: Brain, title: 'AI-Powered', desc: 'Advanced language models simulate real HR interviews' },
+              { icon: Target, title: 'Targeted Practice', desc: 'Choose your role and get relevant questions' },
+              { icon: Sparkles, title: 'Instant Feedback', desc: 'Get scored and receive actionable insights' },
+            ].map((feature, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.8 + idx * 0.1, duration: 0.5 }}
+              >
+                <GlassCard hover className="p-6">
+                  <feature.icon className={`w-10 h-10 mx-auto mb-4 ${mode === 'dark' ? 'text-cyan-400' : 'text-blue-600'}`} />
+                  <h3 className={`text-lg font-semibold mb-2 ${textColor}`}>{feature.title}</h3>
+                  <p className={`${textSecondary} text-sm`}>{feature.desc}</p>
+                </GlassCard>
+              </motion.div>
+            ))}
+          </motion.div>
+        </motion.div>
+      </GlassCard>
+    </div>
+  );
+}
+
+
+--- File: .\src\components\RoleSelector.tsx ---
+import { motion } from 'framer-motion';
+import { Code, Globe, Database, Briefcase, ChevronLeft } from 'lucide-react';
+import { GlassCard } from './GlassCard';
+import { useTheme } from '../contexts/ThemeContext';
+
+interface RoleSelectorProps {
+  onSelectRole: (role: string) => void;
+  onBack: () => void;
+}
+
+const roles = [
+  { id: 'ai-engineer', name: 'AI Engineer', icon: Code, color: 'from-blue-500 to-cyan-500' },
+  { id: 'web-developer', name: 'Web Developer', icon: Globe, color: 'from-green-500 to-emerald-500' },
+  { id: 'data-scientist', name: 'Data Scientist', icon: Database, color: 'from-purple-500 to-pink-500' },
+  { id: 'product-manager', name: 'Product Manager', icon: Briefcase, color: 'from-orange-500 to-red-500' },
+];
+
+export function RoleSelector({ onSelectRole, onBack }: RoleSelectorProps) {
+  const { mode } = useTheme();
+  const textColor = mode === 'dark' ? 'text-slate-100' : 'text-slate-900';
+  const textSecondary = mode === 'dark' ? 'text-slate-300' : 'text-slate-600';
+
+  return (
+    <div className="flex items-center justify-center min-h-screen px-6 py-12">
+      <GlassCard className="max-w-5xl w-full p-8 md:p-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <motion.button
+            onClick={onBack}
+            className={`flex items-center gap-2 mb-8 ${textSecondary} hover:${textColor} transition-colors`}
+            whileHover={{ x: -4 }}
+          >
+            <ChevronLeft className="w-5 h-5" />
+            Back
+          </motion.button>
+
+          <h2 className={`text-4xl md:text-5xl font-bold mb-4 ${textColor} text-center`}>
+            Choose Your Role
+          </h2>
+          <p className={`${textSecondary} text-lg mb-12 text-center max-w-2xl mx-auto`}>
+            Select the position you want to practice for, and our AI will tailor the interview questions accordingly.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {roles.map((role, idx) => (
+              <motion.div
+                key={role.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.1, duration: 0.5 }}
+              >
+                <GlassCard hover>
+                  <motion.button
+                    onClick={() => onSelectRole(role.id)}
+                    className="w-full p-8 text-left"
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <div className="flex items-start gap-4">
+                      <motion.div
+                        className={`p-4 rounded-xl bg-gradient-to-br ${role.color}`}
+                        whileHover={{ rotate: [0, -10, 10, 0] }}
+                        transition={{ duration: 0.5 }}
+                      >
+                        <role.icon className="w-8 h-8 text-white" />
+                      </motion.div>
+                      <div className="flex-1">
+                        <h3 className={`text-2xl font-semibold mb-2 ${textColor}`}>
+                          {role.name}
+                        </h3>
+                        <p className={`${textSecondary}`}>
+                          Practice technical and behavioral questions for this role
+                        </p>
+                      </div>
+                    </div>
+                  </motion.button>
+                </GlassCard>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      </GlassCard>
+    </div>
+  );
+}
+
+
+--- File: .\src\components\ThemeToggle.tsx ---
+import { motion } from 'framer-motion';
+import { Sun, Moon } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
+
+export function ThemeToggle() {
+  const { mode, toggleTheme } = useTheme();
+
+  return (
+    <motion.button
+      onClick={toggleTheme}
+      className="fixed top-6 right-6 z-50 p-3 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 hover:bg-white/20 transition-colors"
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.95 }}
+    >
+      <motion.div
+        initial={false}
+        animate={{ rotate: mode === 'dark' ? 0 : 180 }}
+        transition={{ duration: 0.3 }}
+      >
+        {mode === 'dark' ? (
+          <Moon className="w-5 h-5 text-yellow-300" />
+        ) : (
+          <Sun className="w-5 h-5 text-orange-500" />
+        )}
+      </motion.div>
+    </motion.button>
+  );
+}
+
+
+--- File: .\src\contexts\ThemeContext.tsx ---
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+
+type ThemeMode = 'light' | 'dark';
+
+interface ThemeContextType {
+  mode: ThemeMode;
+  toggleTheme: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    const saved = localStorage.getItem('theme');
+    return (saved as ThemeMode) || 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('theme', mode);
+    document.documentElement.classList.toggle('dark', mode === 'dark');
+  }, [mode]);
+
+  const toggleTheme = () => {
+    setMode(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
+  return (
+    <ThemeContext.Provider value={{ mode, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme() {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within ThemeProvider');
+  }
+  return context;
+}
+
+

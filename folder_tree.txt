@@ -1,0 +1,21 @@
+INTERVIEWAI/
+├── src/
+│   ├── folderContents.py
+│   ├── folderStructure.py
+│   ├── folder_tree.txt
+│   ├── package.json
+│   ├── components/
+│   ├── contexts/
+│   │   ├── App.tsx
+│   │   ├── index.css
+│   │   ├── main.tsx
+│   │   ├── theme.ts
+│   │   ├── vite-env.d.ts
+│   │   │   ├── AIAvatar.tsx
+│   │   │   ├── AnimatedBlob.tsx
+│   │   │   ├── GlassCard.tsx
+│   │   │   ├── InterviewPanel.tsx
+│   │   │   ├── LandingPage.tsx
+│   │   │   ├── RoleSelector.tsx
+│   │   │   ├── ThemeToggle.tsx
+│   │   │   ├── ThemeContext.tsx
