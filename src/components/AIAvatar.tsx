@@ -4,23 +4,36 @@ import { ReactiveBlob } from './ReactiveBlob';
 interface AIAvatarProps {
   isListening: boolean;
   isSpeaking: boolean;
+  userVolume: number; // New prop for live user microphone volume (0 to 1)
 }
 
-export function AIAvatar({ isListening, isSpeaking }: AIAvatarProps) {
+export function AIAvatar({ isListening, isSpeaking, userVolume }: AIAvatarProps) {
   
-  // useMemo will calculate the blob's properties only when the state changes.
   const blobState = useMemo(() => {
+    // When the AI is speaking, it should be dominant and not react to user's voice
     if (isSpeaking) {
-      return { size: 1.6, animationTime: 1 }; // Fast and large when speaking
+      return { size: 1.6, animationTime: 1 };
     }
+    
+    // When the AI is listening, it should react to the user's voice
     if (isListening) {
-      return { size: 1.5, animationTime: 4 }; // Slower and pulsing when listening
+      // Base size when listening
+      const baseSize = 1.5;
+      // Additional size based on how loud the user is.
+      // The multiplier (e.g., 0.8) controls sensitivity.
+      const dynamicSize = baseSize + (userVolume * 0.8);
+      
+      // Make the animation faster when the user is speaking
+      const dynamicAnimationTime = 4 - (userVolume * 3);
+
+      return { size: dynamicSize, animationTime: dynamicAnimationTime };
     }
-    return { size: 1.4, animationTime: 3 }; // Default idle state
-  }, [isSpeaking, isListening]);
+    
+    // Default idle state
+    return { size: 1.4, animationTime: 3 };
+  }, [isSpeaking, isListening, userVolume]);
 
   return (
-    // The container ensures the blob is centered and has a fixed size area.
     <div className="relative w-48 h-48 mx-auto flex items-center justify-center">
       <ReactiveBlob 
         size={blobState.size} 
