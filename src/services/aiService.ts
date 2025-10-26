@@ -36,7 +36,7 @@ export function unlockAudio(): void {
 
 export async function getAIResponse(chatHistory: ChatMessage[]): Promise<string> {
   if (!OPENROUTER_API_KEY) throw new Error("Missing OpenRouter API key");
-  console.log("🧠 Sending to OpenRouter:", chatHistory.at(-1)?.content);
+  console.log("🧠 Sending to OpenRouter:", chatHistory[chatHistory.length - 1]?.content);
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",

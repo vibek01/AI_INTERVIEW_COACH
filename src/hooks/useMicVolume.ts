@@ -8,9 +8,12 @@ export function useMicVolume(stream: MediaStream | null) {
   const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // If there's no stream, reset volume and do nothing
-    if (!stream) {
+    // ✨ FIX: If there's no stream OR if the stream has no audio tracks, reset and do nothing.
+    if (!stream || stream.getAudioTracks().length === 0) {
       setVolume(0);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
       return;
     }
 
@@ -22,6 +25,10 @@ export function useMicVolume(stream: MediaStream | null) {
     
     const audioContext = audioContextRef.current;
     const analyser = analyserRef.current;
+    if (!analyser){
+        console.log('analyser not present');
+        return;
+    }
     
     // Configure the analyzer
     analyser.fftSize = 256;

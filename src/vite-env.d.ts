@@ -31,14 +31,23 @@ interface SpeechRecognition extends EventTarget {
   lang: string;
   start(): void;
   stop(): void;
+  abort(): void;
 
-  // FIX: Allow these properties to be assigned null to remove listeners
+  // ✅ Add these optional handlers so TypeScript accepts them
+  onaudiostart: ((event: Event) => void) | null;
+  onsoundstart: ((event: Event) => void) | null;
+  onspeechstart: ((event: Event) => void) | null;
+  onspeechend: ((event: Event) => void) | null;
+  onsoundend: ((event: Event) => void) | null;
+  onaudioend: ((event: Event) => void) | null;
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onnomatch: ((event: Event) => void) | null;
   onerror: ((event: Event) => void) | null;
+  onstart: (() => void) | null;
   onend: (() => void) | null;
 }
 
-// Add the vendor-prefixed and standard versions to the Window interface
+// ✅ Add vendor-prefixed and standard versions
 interface Window {
   SpeechRecognition: SpeechRecognitionStatic;
   webkitSpeechRecognition: SpeechRecognitionStatic;
