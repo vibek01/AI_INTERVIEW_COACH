@@ -1,14 +1,17 @@
 import React from 'react';
-import styled from 'styled-components';
+import styled, { css } from 'styled-components';
 import { useTheme } from '../contexts/ThemeContext';
 
+// ✨ FIX: Update the interface to use '$' prefixed props
 interface ReactiveBlobProps {
-  baseSize?: number;
-  baseAnimationTime?: number;
-  userVolume?: number;
+  $baseSize?: number;
+  $baseAnimationTime?: number;
+  $userVolume?: number;
+  $isThinking?: boolean;
 }
 
-export function ReactiveBlob({ baseSize = 1, baseAnimationTime = 2, userVolume = 0 }: ReactiveBlobProps) {
+// ✨ FIX: Update the function signature to destructure the '$' prefixed props
+export function ReactiveBlob({ $baseSize = 1, $baseAnimationTime = 2, $userVolume = 0, $isThinking = false }: ReactiveBlobProps) {
   const { mode } = useTheme();
 
   const colors = mode === 'dark' ? {
@@ -20,11 +23,13 @@ export function ReactiveBlob({ baseSize = 1, baseAnimationTime = 2, userVolume =
   };
 
   return (
+    // ✨ FIX: Pass the '$' prefixed props to the styled component
     <StyledWrapper 
-      baseSize={baseSize} 
-      baseAnimationTime={baseAnimationTime} 
-      colors={colors}
-      userVolume={userVolume}
+      $baseSize={$baseSize} 
+      $baseAnimationTime={$baseAnimationTime} 
+      $colors={colors} // 'colors' doesn't need a '$' as it's just for passing color values
+      $userVolume={$userVolume}
+      $isThinking={$isThinking}
     >
       <div className="loader">
         <svg width={100} height={100} viewBox="0 0 100 100">
@@ -46,31 +51,24 @@ export function ReactiveBlob({ baseSize = 1, baseAnimationTime = 2, userVolume =
   );
 }
 
-const StyledWrapper = styled.div<{ baseSize: number; baseAnimationTime: number; colors: any; userVolume: number; }>`
+// ✨ FIX: Update the styled-component's type definition and logic to use '$' props
+const StyledWrapper = styled.div<{ $baseSize: number; $baseAnimationTime: number; $colors: any; $userVolume: number; $isThinking: boolean; }>`
+  @keyframes thinkingPulse { 0%, 100% { filter: contrast(15); } 50% { filter: contrast(10); } }
+
   .loader {
-    --color-one: ${props => props.colors.one};
-    --color-two: ${props => props.colors.two};
-    --color-three: ${props => props.colors.three};
-    --color-four: ${props => props.colors.four};
-    --color-five: ${props => props.colors.five};
+    --color-one: ${props => props.$colors.one};
+    --color-two: ${props => props.$colors.two};
+    --color-three: ${props => props.$colors.three};
+    --color-four: ${props => props.$colors.four};
+    --color-five: ${props => props.$colors.five};
     
-    // --- CORE FIX AREA ---
+    --base-size: ${props => props.$baseSize};
+    --voice-pulse-scale: ${props => 0.85 + (props.$userVolume * 0.65)};
 
-    // 1. DYNAMIC SCALING (Shrink & Expand)
-    --base-size: ${props => props.baseSize};
-    // The orb now shrinks to 85% of its base size at silence (0 volume)
-    // and expands up to 150% of its base size at max volume (1.0).
-    // The total range of motion is 65% (1.50 - 0.85).
-    --voice-pulse-scale: ${props => 0.85 + (props.userVolume * 0.65)};
+    --base-animation-time: ${props => props.$baseAnimationTime}s;
+    --dynamic-animation-time: calc(var(--base-animation-time) - (${props => props.$userVolume} * (var(--base-animation-time) * 0.75)));
 
-    // 2. DYNAMIC ANIMATION SPEED (Inner Wobble)
-    --base-animation-time: ${props => props.baseAnimationTime}s;
-    // At silence, animation is the full base time. At max volume, it becomes much faster.
-    // Example: Base time 4s. At max volume, it becomes 4 - (1 * 3) = 1s.
-    --dynamic-animation-time: calc(var(--base-animation-time) - (${props => props.userVolume} * (var(--base-animation-time) * 0.75)));
-
-    // 3. DYNAMIC GLOW
-    --shadow-spread: ${props => 25 + (props.userVolume * 40)}px;
+    --shadow-spread: ${props => 25 + (props.$userVolume * 40)}px;
 
     position: relative;
     border-radius: 50%;
@@ -78,31 +76,21 @@ const StyledWrapper = styled.div<{ baseSize: number; baseAnimationTime: number; 
     transform: scale(calc(var(--base-size) * var(--voice-pulse-scale)));
     transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
 
-    box-shadow:
-      0 0 var(--shadow-spread) 0 var(--color-three),
-      0 20px 50px 0 var(--color-four);
-      
+    box-shadow: 0 0 var(--shadow-spread) 0 var(--color-three), 0 20px 50px 0 var(--color-four);
     animation: colorize calc(var(--base-animation-time) * 3) ease-in-out infinite;
   }
-
-  .loader::before {
-    content: ""; position: absolute; top: 0; left: 0; width: 100px; height: 100px;
-    border-radius: 50%; border-top: solid 1px var(--color-one);
-    border-bottom: solid 1px var(--color-two); background: linear-gradient(180deg, var(--color-five), var(--color-four));
-    box-shadow: inset 0 10px 10px 0 var(--color-three), inset 0 -10px 10px 0 var(--color-four);
-  }
-
-  .loader .box {
-    width: 100px; height: 100px; background: linear-gradient(180deg, var(--color-one) 30%, var(--color-two) 70%);
-    mask: url(#clipping); -webkit-mask: url(#clipping);
-  }
-
+  
+  .loader::before { content: ""; position: absolute; top: 0; left: 0; width: 100px; height: 100px; border-radius: 50%; border-top: solid 1px var(--color-one); border-bottom: solid 1px var(--color-two); background: linear-gradient(180deg, var(--color-five), var(--color-four)); box-shadow: inset 0 10px 10px 0 var(--color-three), inset 0 -10px 10px 0 var(--color-four); }
+  .loader .box { width: 100px; height: 100px; background: linear-gradient(180deg, var(--color-one) 30%, var(--color-two) 70%); mask: url(#clipping); -webkit-mask: url(#clipping); }
   .loader svg { position: absolute; }
 
-  // Apply the dynamic animation time to the key internal animations
   .loader svg #clipping {
     filter: contrast(15);
-    animation: roundness calc(var(--dynamic-animation-time) / 2) linear infinite;
+    /* ✨ FIX: Changed 'thinkingPulse' to a string to fix the ReferenceError */
+    animation: ${props => props.$isThinking 
+      ? `thinkingPulse var(--dynamic-animation-time) linear infinite` 
+      : `roundness calc(var(--dynamic-animation-time) / 2) linear infinite`
+    };
   }
 
   .loader svg #clipping polygon { filter: blur(7px); }

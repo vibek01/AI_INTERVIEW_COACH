@@ -6,10 +6,9 @@ def extract_file_contents(root_dir, output_filename="extracted_contents.txt"):
     excluding specified directories and files, and saves them to an output file.
     """
     excluded_dirs = ["node_modules", ".git"]
-    excluded_files = [".gitignore", ".env", "package-lock.json", "postcss.config.js",
+    excluded_files = [".gitignore", "package-lock.json", "postcss.config.js",
                       "tailwind.config.js", "tsconfig.app.json", "tsconfig.json",
-                      "tsconfig.node.json", "vite.config.ts", "eslint.config.js",
-                      "index.html"] # Add any other files you want to exclude
+                      "folderContents.py", "folderStructure.py", "folder_tree.txt", "extracted_contents.txt"] # Add any other files you want to exclude
 
     with open(output_filename, "w", encoding="utf-8") as outfile:
         for dirpath, dirnames, filenames in os.walk(root_dir):

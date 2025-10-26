@@ -1,199 +1,299 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Video, VideoOff, Mic, MicOff, Play, Square, X, ChevronLeft } from 'lucide-react';
+import { Video, Mic, Play, Square, X, ChevronLeft, BrainCircuit, MessageSquare, Loader2 } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { AIAvatar } from './AIAvatar';
 import { useTheme } from '../contexts/ThemeContext';
-import { useMicVolume } from '../hooks/useMicVolume'; // Import the new hook
+import { useMicVolume } from '../hooks/useMicVolume';
+import { ChatMessage, getAIResponse, speakText } from '../services/aiService';
 
-interface InterviewPanelProps {
-  role: string;
-  onBack: () => void;
-}
+const FeedbackDisplay = ({ messages, feedback }: { messages: ChatMessage[], feedback: string }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, feedback]);
 
-export function InterviewPanel({ role, onBack }: InterviewPanelProps) {
+  return (
+    <GlassCard className="p-4 h-full flex flex-col">
+      <div className="flex items-center gap-2 mb-3 text-slate-300">
+        <MessageSquare className="w-5 h-5" />
+        <h3 className="font-semibold">Transcript & Feedback</h3>
+      </div>
+      <div ref={scrollRef} className="flex-grow overflow-y-auto pr-2 text-sm text-slate-300 space-y-4">
+        {messages.slice(1).map((msg, index) => (
+          <div key={index} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+            <div className={`px-3 py-2 rounded-lg max-w-[85%] ${msg.role === 'user' ? 'bg-blue-600/50' : 'bg-slate-700/50'}`}>
+              <p>{msg.content}</p>
+            </div>
+          </div>
+        ))}
+        {feedback && (
+          <div className="mt-4 p-3 bg-slate-800/60 rounded-lg border border-slate-600">
+            <h4 className="font-bold text-slate-100 mb-2 flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-cyan-400" />Final Feedback</h4>
+            <p className="whitespace-pre-wrap">{feedback}</p>
+          </div>
+        )}
+      </div>
+    </GlassCard>
+  );
+};
+
+export function InterviewPanel({ role, onBack }: { role: string; onBack: () => void; }) {
   const { mode } = useTheme();
   const textColor = mode === 'dark' ? 'text-slate-100' : 'text-slate-800';
   const textSecondary = mode === 'dark' ? 'text-slate-400' : 'text-slate-500';
 
-  const [isInterviewStarted, setIsInterviewStarted] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(false);
-  const [isMicOn, setIsMicOn] = useState(false);
-  const [isAISpeaking, setIsAISpeaking] = useState(false);
-  const [isAIListening, setIsAIListening] = useState(false);
-  const [timer, setTimer] = useState(0);
+  const [interviewState, setInterviewState] = useState<'idle' | 'running' | 'ended'>('idle');
+  const [aiState, setAIState] = useState<'idle' | 'speaking' | 'listening' | 'thinking'>('idle');
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [finalFeedback, setFinalFeedback] = useState('');
+  const [timeLeft, setTimeLeft] = useState(60);
+  const [isInitializing, setIsInitializing] = useState(false);
 
-  // State to hold the media streams for camera and microphone
-  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
-
-  // Use our custom hook to get the volume from the mic stream
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(true);
   const userVolume = useMicVolume(micStream);
-
+  
   const videoRef = useRef<HTMLVideoElement>(null);
-  const timerIntervalRef = useRef<number | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement>(null);
+  const speechRecognitionRef = useRef<any>(null);
+  const interviewTimerRef = useRef<number | null>(null);
+  const isAISpeakingRef = useRef(false);
 
   const roleName = role.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
-  // Combined cleanup effect
+  const resetInterviewState = useCallback(() => {
+    if (interviewTimerRef.current) clearInterval(interviewTimerRef.current);
+    speechRecognitionRef.current?.stop();
+    setMicStream(null); 
+    setChatHistory([]);
+    setFinalFeedback('');
+    setTimeLeft(60);
+    setAIState('idle');
+    setInterviewState('idle');
+  }, []);
+
   useEffect(() => {
+    const stream = micStream;
     return () => {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      videoStream?.getTracks().forEach(track => track.stop());
-      micStream?.getTracks().forEach(track => track.stop());
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
     };
-  }, [videoStream, micStream]);
+  }, [micStream]);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const toggleCamera = async () => {
-    if (videoStream) {
-      videoStream.getTracks().forEach(track => track.stop());
-      setVideoStream(null);
-      setIsCameraOn(false);
-    } else {
+  const startListening = useCallback(() => {
+    isAISpeakingRef.current = false;
+    if (interviewState === 'running') {
+      setAIState('listening');
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) videoRef.current.srcObject = stream;
-        setVideoStream(stream);
-        setIsCameraOn(true);
-      } catch (err) {
-        console.error("Error accessing camera:", err);
-        alert("Could not access the camera. Please check permissions.");
+        speechRecognitionRef.current.start();
+      } catch (e) {
+        // Safe to ignore
       }
     }
-  };
+  }, [interviewState]);
 
-  const toggleMic = async () => {
-    if (micStream) {
-      micStream.getTracks().forEach(track => track.stop());
-      setMicStream(null);
-      setIsMicOn(false);
-    } else {
-      try {
-        // Request only audio for the mic stream
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        setMicStream(stream);
-        setIsMicOn(true);
-      } catch (err) {
-        console.error("Error accessing microphone:", err);
-        alert("Could not access the microphone. Please check permissions.");
-      }
-    }
-  };
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
 
-  const startInterview = () => {
-    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    setTimer(0);
-    setIsInterviewStarted(true);
-    timerIntervalRef.current = window.setInterval(() => setTimer(p => p + 1), 1000);
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
     
-    setIsAISpeaking(true);
-    setTimeout(() => {
-      setIsAISpeaking(false);
-      setIsAIListening(true);
-    }, 4000);
+    recognition.onresult = (event: any) => {
+      const userText = event.results[0][0].transcript;
+      if (userText.trim()) {
+        setAIState('thinking');
+        setChatHistory(prev => [...prev, { role: 'user', content: userText }]);
+      }
+    };
+    
+    recognition.onerror = (event: any) => console.error("Speech recognition error:", event.error);
+    recognition.onend = () => {
+      if (interviewState === 'running' && !isAISpeakingRef.current && aiState === 'listening') {
+        startListening();
+      }
+    };
+
+    speechRecognitionRef.current = recognition;
+  }, [interviewState, aiState, startListening]);
+
+  useEffect(() => {
+    if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === 'user') {
+      const processAIResponse = async () => {
+        const aiText = await getAIResponse(chatHistory);
+        setChatHistory(prev => [...prev, { role: 'assistant', content: aiText }]);
+        try {
+          const audioUrl = await speakText(aiText);
+          if (audioPlayerRef.current) {
+            isAISpeakingRef.current = true;
+            audioPlayerRef.current.src = audioUrl;
+            audioPlayerRef.current.play();
+            setAIState('speaking');
+          }
+        } catch (error) {
+          console.error(error);
+          startListening();
+        }
+      };
+      processAIResponse();
+    }
+  }, [chatHistory, startListening]);
+
+  const startInterview = async () => {
+    setIsInitializing(true);
+    resetInterviewState();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      setMicStream(stream);
+      if (videoRef.current) videoRef.current.srcObject = stream;
+
+      const systemPrompt = `You are an expert HR interviewer...`;
+      const firstQuestion = `Hello, thanks for coming in...`;
+      const initialHistory: ChatMessage[] = [{ role: 'system', content: systemPrompt }, { role: 'assistant', content: firstQuestion }];
+      setChatHistory(initialHistory);
+
+      interviewTimerRef.current = window.setInterval(() => setTimeLeft(t => t > 0 ? t - 1 : 0), 1000);
+      setInterviewState('running');
+      
+      setAIState('thinking');
+      const audioUrl = await speakText(firstQuestion);
+      if (audioPlayerRef.current) {
+        isAISpeakingRef.current = true;
+        audioPlayerRef.current.src = audioUrl;
+        audioPlayerRef.current.play();
+        setAIState('speaking');
+      }
+    } catch (err) {
+      alert("Could not access camera/microphone. Please grant permissions and use an HTTPS connection.");
+      resetInterviewState();
+    } finally {
+      setIsInitializing(false);
+    }
   };
 
-  const endInterview = () => {
-    setIsInterviewStarted(false);
-    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    timerIntervalRef.current = null;
-    setIsAISpeaking(false);
-    setIsAIListening(false);
+  const endInterview = useCallback(async () => {
+    if (interviewState !== 'running') return;
+    
+    setInterviewState('ended');
+    setAIState('thinking');
+    if (interviewTimerRef.current) clearInterval(interviewTimerRef.current);
+    speechRecognitionRef.current?.stop();
+    setMicStream(null);
+
+    const finalPrompt: ChatMessage[] = [
+      ...chatHistory,
+      { role: 'user', content: `The interview is over...` }
+    ];
+    const feedback = await getAIResponse(finalPrompt);
+    setFinalFeedback(feedback);
+    setAIState('idle');
+  }, [interviewState, chatHistory]);
+  
+  const toggleMic = () => {
+    if(micStream) {
+        micStream.getAudioTracks().forEach(track => track.enabled = !isMicOn);
+        setIsMicOn(!isMicOn);
+    }
   };
+
+  const toggleCamera = () => {
+    if(micStream) {
+        micStream.getVideoTracks().forEach(track => track.enabled = !isCameraOn);
+        setIsCameraOn(!isCameraOn);
+    }
+  };
+  
+  useEffect(() => {
+    if (timeLeft === 0 && interviewState === 'running') {
+      endInterview();
+    }
+  }, [timeLeft, interviewState, endInterview]);
+  
+  const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
 
   return (
     <div className="flex items-center justify-center min-h-screen p-4">
+      <audio ref={audioPlayerRef} onEnded={startListening} />
       <GlassCard className="w-full max-w-6xl p-6 md:p-8">
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, ease: 'easeOut' }}>
-          <div className="grid grid-cols-3 items-center mb-6">
-            <div className="justify-self-start">
-              <motion.button onClick={onBack} className={`flex items-center gap-2 ${textSecondary} hover:${textColor} transition-colors`} whileHover={{ x: -4, transition: { type: 'spring', stiffness: 400 } }}>
-                <ChevronLeft className="w-5 h-5" />
-                Change Role
-              </motion.button>
-            </div>
-            <div className="justify-self-center">
-              <AnimatePresence>
-                {isInterviewStarted && (
-                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className={`text-2xl font-mono font-bold px-4 py-2 rounded-lg ${mode === 'dark' ? 'bg-black/20' : 'bg-white/20'}`}>
-                    {formatTime(timer)}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-            <div className="justify-self-end"></div>
+        <div className="grid grid-cols-3 items-center mb-6">
+          <div className="justify-self-start">
+            <motion.button onClick={onBack} className={`flex items-center gap-2 ${textSecondary} hover:${textColor} transition-colors`} whileHover={{ x: -4 }}>
+              <ChevronLeft className="w-5 h-5" /> Change Role
+            </motion.button>
           </div>
-
-          <div className="text-center mb-8">
-            <h2 className={`text-3xl md:text-4xl font-bold mb-1 ${textColor}`}>{roleName} Interview</h2>
-            <p className={`${textSecondary}`}>{isInterviewStarted ? "The interview is now in progress." : "Prepare yourself and start when you're ready."}</p>
+          <div className="justify-self-center">
+            {interviewState === 'running' && <div className={`text-2xl font-mono font-bold px-4 py-2 rounded-lg ${mode === 'dark' ? 'bg-black/20' : 'bg-white/20'}`}>{formatTime(timeLeft)}</div>}
           </div>
+          <div className="justify-self-end"></div>
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="text-center mb-8">
+          <h2 className={`text-3xl md:text-4xl font-bold mb-1 ${textColor}`}>{roleName} Interview</h2>
+          <p className={`${textSecondary}`}>
+            {interviewState === 'ended' ? "Interview complete. Here is your feedback." : "The AI will ask you questions and analyze your responses."}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="lg:order-2">
+            <FeedbackDisplay messages={chatHistory} feedback={finalFeedback} />
+          </div>
+          <div className="lg:order-1 flex flex-col gap-6">
             <GlassCard className="p-6 flex flex-col items-center justify-center">
               <h3 className={`text-lg font-semibold mb-4 ${textColor}`}>AI Interviewer</h3>
-              <AIAvatar 
-                isListening={isAIListening} 
-                isSpeaking={isAISpeaking}
-                userVolume={userVolume} // Pass the live volume to the avatar
-              />
+              <AIAvatar isListening={aiState === 'listening'} isSpeaking={aiState === 'speaking'} isThinking={aiState === 'thinking'} userVolume={userVolume} />
               <div className="mt-4 h-8 flex items-center justify-center">
                 <AnimatePresence mode="wait">
-                  <motion.div key={isAISpeaking ? 'speaking' : isAIListening ? 'listening' : 'idle'} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className={`inline-block px-4 py-1.5 rounded-full text-sm font-medium ${isAISpeaking ? 'bg-green-500/20 text-green-300' : isAIListening ? 'bg-blue-500/20 text-blue-300' : 'bg-slate-500/20 text-slate-400'}`}>
-                    {isAISpeaking ? 'Speaking...' : isAIListening ? 'Listening...' : 'Idle'}
+                  <motion.div key={aiState} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className={`inline-block px-4 py-1.5 rounded-full text-sm font-medium bg-slate-500/20 text-slate-300`}>
+                    {aiState.charAt(0).toUpperCase() + aiState.slice(1)}...
                   </motion.div>
                 </AnimatePresence>
               </div>
             </GlassCard>
-
             <GlassCard className="p-6 flex flex-col items-center justify-center">
               <h3 className={`text-lg font-semibold mb-4 ${textColor}`}>Your Camera</h3>
-              <div className="relative w-full aspect-video bg-black/30 rounded-lg overflow-hidden flex items-center justify-center">
-                <video ref={videoRef} autoPlay playsInline muted className={`w-full h-full object-cover transition-opacity ${isCameraOn ? 'opacity-100' : 'opacity-0'}`} />
-                <AnimatePresence>
-                  {!isCameraOn && (
-                    <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500">
-                      <VideoOff className="w-12 h-12" /><span className="font-medium">Camera is off</span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+              <div className="relative w-full aspect-video bg-black/30 rounded-lg overflow-hidden">
+                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
               </div>
-              <div className="flex justify-center gap-4 mt-4">
-                <motion.button key="camera" onClick={toggleCamera} className={`p-3 rounded-full border transition-colors ${isCameraOn ? 'bg-blue-500 text-white border-transparent shadow-lg shadow-blue-500/50' : 'bg-white/5 border-white/10 text-slate-400'}`} whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.95 }}>
-                  {isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-                </motion.button>
-                <motion.button key="mic" onClick={toggleMic} className={`p-3 rounded-full border transition-colors ${isMicOn ? 'bg-blue-500 text-white border-transparent shadow-lg shadow-blue-500/50' : 'bg-white/5 border-white/10 text-slate-400'}`} whileHover={{ scale: 1.1, y: -2 }} whileTap={{ scale: 0.95 }}>
-                  {isMicOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-                </motion.button>
-              </div>
+              {interviewState === 'running' && (
+                <div className="flex justify-center gap-4 mt-4">
+                  <button onClick={toggleMic} className={`p-3 rounded-full transition-colors ${isMicOn ? 'bg-white/20' : 'bg-red-500/50'}`}>
+                    <Mic className={`w-6 h-6 ${textColor}`} />
+                  </button>
+                  <button onClick={toggleCamera} className={`p-3 rounded-full transition-colors ${isCameraOn ? 'bg-white/20' : 'bg-red-500/50'}`}>
+                    <Video className={`w-6 h-6 ${textColor}`} />
+                  </button>
+                </div>
+              )}
             </GlassCard>
           </div>
-
-          <div className="flex flex-wrap justify-center gap-4">
-            <AnimatePresence mode="wait">
-              {!isInterviewStarted ? (
-                <motion.button key="start" onClick={startInterview} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="px-8 py-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold text-lg shadow-lg flex items-center gap-2" whileHover={{ scale: 1.05, boxShadow: '0 0 20px rgba(16, 185, 129, 0.5)' }} whileTap={{ scale: 0.98 }}>
-                  <Play className="w-5 h-5" />Start Interview
-                </motion.button>
-              ) : (
-                <motion.div key="controls" className="flex flex-wrap justify-center gap-4" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
-                  <motion.button onClick={endInterview} className="px-8 py-3 rounded-full bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold text-lg shadow-lg flex items-center gap-2" whileHover={{ scale: 1.05, boxShadow: '0 0 20px rgba(239, 68, 68, 0.5)' }} whileTap={{ scale: 0.98 }}>
-                    <Square className="w-5 h-5" />End Interview
-                  </motion.button>
-                  <motion.button onClick={onBack} className={`px-8 py-3 rounded-full ${mode === 'dark' ? 'bg-white/5 hover:bg-white/10' : 'bg-slate-900/5 hover:bg-slate-900/10'} ${textColor} font-semibold text-lg backdrop-blur-sm border ${mode === 'dark' ? 'border-white/20' : 'border-slate-900/20'} flex items-center gap-2`} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
-                    <X className="w-5 h-5" />Exit
-                  </motion.button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </motion.div>
+        </div>
+        
+        <div className="flex flex-wrap justify-center gap-4">
+          {interviewState !== 'running' ? (
+            <motion.button 
+              onClick={interviewState === 'idle' ? startInterview : resetInterviewState}
+              disabled={isInitializing}
+              className="px-8 py-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold text-lg shadow-lg flex items-center gap-2 disabled:opacity-50" 
+              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}
+            >
+              {isInitializing ? <Loader2 className="w-5 h-5 animate-spin" /> : interviewState === 'idle' ? <Play className="w-5 h-5" /> : <X className="w-5 h-5" />}
+              {isInitializing ? 'Starting...' : interviewState === 'idle' ? 'Start Interview' : 'Start Over'}
+            </motion.button>
+          ) : (
+            <motion.button onClick={endInterview} className="px-8 py-3 rounded-full bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold text-lg shadow-lg flex items-center gap-2" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
+              <Square className="w-5 h-5" /> End Interview
+            </motion.button>
+          )}
+        </div>
       </GlassCard>
     </div>
   );
