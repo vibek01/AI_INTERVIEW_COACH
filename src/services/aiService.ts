@@ -6,6 +6,7 @@ const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
 const YOUR_SITE_URL = import.meta.env.VITE_YOUR_SITE_URL || 'http://localhost:5173';
 const YOUR_SITE_NAME = import.meta.env.VITE_YOUR_SITE_NAME || 'AI Interview Coach';
 
+// ✨ CHANGE: Reverted to the original free model to fix the 404 error.
 const AI_MODEL = "z-ai/glm-4.5-air:free";
 const ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Adam
 
@@ -14,9 +15,6 @@ export interface ChatMessage {
   content: string;
 }
 
-/**
- * ✨ FIX: Unlocks audio context on mobile (must be called in a user gesture).
- */
 export function unlockAudio(): void {
   try {
     const context = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -60,7 +58,7 @@ export async function getAIResponse(chatHistory: ChatMessage[]): Promise<string>
     const data = await response.json();
     const aiText = data?.choices?.[0]?.message?.content || "";
     console.log("✅ Got AI response:", aiText.slice(0, 60) + "...");
-    return aiText.trim() || "Sorry, I couldn't think of a response.";
+    return aiText.trim() || "Sorry, I ran into an issue generating my response.";
   } catch (err) {
     console.error("🔥 OpenRouter request failed:", err);
     return "Sorry, I ran into an issue generating my response.";

@@ -7,16 +7,18 @@ interface SpeechRecognitionHook {
   startListening: () => void;
   stopListening: () => void;
   error: string | null;
+  userIsSpeaking: boolean; // ✨ ADDED: New state to track user speech
 }
 
 /**
  * Custom hook for speech recognition.
- * Handles mobile auto-stop and integrates with TTS flags.
+ * Now tracks when the user is actively speaking.
  */
 export function useSpeechRecognition(): SpeechRecognitionHook {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [userIsSpeaking, setUserIsSpeaking] = useState(false); // ✨ ADDED: State for the new feature
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const isListeningRef = useRef(false);
@@ -29,13 +31,25 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = false; // Mobile-friendly
+    recognition.continuous = false;
     recognition.interimResults = false;
     recognition.lang = "en-US";
 
     recognition.onstart = () => {
       setIsListening(true);
       console.log("🎙️ Speech recognition started");
+    };
+
+    // ✨ ADDED: Event listener for when speech is detected
+    recognition.onspeechstart = () => {
+      setUserIsSpeaking(true);
+      console.log("🗣️ User started speaking");
+    };
+
+    // ✨ ADDED: Event listener for when speech ends
+    recognition.onspeechend = () => {
+      setUserIsSpeaking(false);
+      console.log("🤫 User stopped speaking");
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -49,11 +63,13 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       console.warn("Speech recognition error:", event.error);
       setError(event.error);
       setIsListening(false);
+      setUserIsSpeaking(false); // Reset on error
     };
 
     recognition.onend = () => {
       console.log("⚠️ SpeechRecognition ended automatically");
       setIsListening(false);
+      setUserIsSpeaking(false); // Reset on end
 
       // Auto-restart if still supposed to listen
       if (isListeningRef.current) {
@@ -95,5 +111,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     recognitionRef.current.stop();
   }, []);
 
-  return { isListening, transcript, startListening, stopListening, error };
+  // ✨ ADDED: Return the new state
+  return { isListening, transcript, startListening, stopListening, error, userIsSpeaking };
 }
