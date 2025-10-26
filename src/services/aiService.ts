@@ -4,10 +4,11 @@
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
 const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
 
-const YOUR_SITE_URL = import.meta.env.VITE_YOUR_SITE_URL;
-const YOUR_SITE_NAME = import.meta.env.VITE_YOUR_SITE_NAME;
+const YOUR_SITE_URL = import.meta.env.VITE_YOUR_SITE_URL || 'http://localhost:5173';
+const YOUR_SITE_NAME = import.meta.env.VITE_YOUR_SITE_NAME || 'AI Interview Coach';
 
-const AI_MODEL = "tngtech/deepseek-r1t2-chimera:free";
+// ✨ FIX: Using the new, requested model
+const AI_MODEL = "z-ai/glm-4.5-air:free";
 const ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Adam
 
 // Type definition for chat messages
@@ -23,6 +24,10 @@ export async function getAIResponse(chatHistory: ChatMessage[]): Promise<string>
   if (!OPENROUTER_API_KEY) {
     throw new Error("OpenRouter API key is not configured in .env.local");
   }
+
+  // ✨ FIX: Added logging to see if the function is being called
+  console.log("Attempting to get AI response with model:", AI_MODEL);
+  console.log("Sending chat history:", chatHistory);
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -40,16 +45,19 @@ export async function getAIResponse(chatHistory: ChatMessage[]): Promise<string>
     });
 
     if (!response.ok) {
+      // ✨ FIX: More robust error logging to see the exact API error
       const errorBody = await response.text();
+      console.error("OpenRouter API Error Response Body:", errorBody);
       throw new Error(`OpenRouter API error: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
     const data = await response.json();
+    console.log("Received AI response:", data);
     return data.choices[0].message.content;
 
   } catch (error) {
     console.error("Error getting AI response:", error);
-    return "Sorry, my brain is having a little trouble right now. Please check the console for errors.";
+    return "Sorry, my brain is having a little trouble right now. Please check the browser console for detailed errors.";
   }
 }
 
@@ -78,6 +86,7 @@ export async function speakText(text: string): Promise<string> {
 
     if (!response.ok) {
       const errorBody = await response.text();
+      console.error("ElevenLabs API Error Response Body:", errorBody);
       throw new Error(`ElevenLabs API error: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 

@@ -1,11 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Video, Mic, Play, Square, X, ChevronLeft, BrainCircuit, MessageSquare, Loader2 } from 'lucide-react';
+import { Video, Mic, Play, Square, X, ChevronLeft, BrainCircuit, MessageSquare, Loader2, AlertTriangle } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { AIAvatar } from './AIAvatar';
 import { useTheme } from '../contexts/ThemeContext';
 import { useMicVolume } from '../hooks/useMicVolume';
 import { ChatMessage, getAIResponse, speakText } from '../services/aiService';
+
+// ✨ NEW: Helper function from the JS example to prevent AI from speaking markdown.
+const cleanTextForSpeech = (text: string): string => {
+  let cleaned = text.replace(/[\*#_`]/g, '');
+  cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, '');
+  return cleaned.trim();
+};
 
 const FeedbackDisplay = ({ messages, feedback }: { messages: ChatMessage[], feedback: string }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -40,6 +47,7 @@ const FeedbackDisplay = ({ messages, feedback }: { messages: ChatMessage[], feed
   );
 };
 
+
 export function InterviewPanel({ role, onBack }: { role: string; onBack: () => void; }) {
   const { mode } = useTheme();
   const textColor = mode === 'dark' ? 'text-slate-100' : 'text-slate-800';
@@ -49,8 +57,9 @@ export function InterviewPanel({ role, onBack }: { role: string; onBack: () => v
   const [aiState, setAIState] = useState<'idle' | 'speaking' | 'listening' | 'thinking'>('idle');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [finalFeedback, setFinalFeedback] = useState('');
-  const [timeLeft, setTimeLeft] = useState(60);
+  const [timeLeft, setTimeLeft] = useState(300);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [isMicOn, setIsMicOn] = useState(true);
@@ -59,120 +68,150 @@ export function InterviewPanel({ role, onBack }: { role: string; onBack: () => v
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioPlayerRef = useRef<HTMLAudioElement>(null);
-  const speechRecognitionRef = useRef<any>(null);
+  const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
   const interviewTimerRef = useRef<number | null>(null);
   const isAISpeakingRef = useRef(false);
 
   const roleName = role.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
-  const resetInterviewState = useCallback(() => {
-    if (interviewTimerRef.current) clearInterval(interviewTimerRef.current);
-    speechRecognitionRef.current?.stop();
-    setMicStream(null); 
-    setChatHistory([]);
-    setFinalFeedback('');
-    setTimeLeft(60);
-    setAIState('idle');
-    setInterviewState('idle');
-  }, []);
-
+  // ✨ FIX: Use useEffect to safely handle the camera stream
   useEffect(() => {
-    const stream = micStream;
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
+    if (videoRef.current && micStream) {
+      videoRef.current.srcObject = micStream;
+    }
   }, [micStream]);
 
-  const startListening = useCallback(() => {
+  const cleanup = useCallback(() => {
+    if (interviewTimerRef.current) clearInterval(interviewTimerRef.current);
+    if (speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop();
+      speechRecognitionRef.current.onresult = null;
+      speechRecognitionRef.current.onend = null;
+      speechRecognitionRef.current.onerror = null;
+    }
+    micStream?.getTracks().forEach(track => track.stop());
+    setMicStream(null);
+  }, [micStream]);
+
+  const resetInterviewState = useCallback(() => {
+    cleanup();
+    setChatHistory([]);
+    setFinalFeedback('');
+    setTimeLeft(300);
+    setAIState('idle');
+    setInterviewState('idle');
+    setPermissionError(null);
     isAISpeakingRef.current = false;
-    if (interviewState === 'running') {
-      setAIState('listening');
-      try {
-        speechRecognitionRef.current.start();
-      } catch (e) {
-        // Safe to ignore
-      }
+  }, [cleanup]);
+  
+  const startListening = useCallback(() => {
+    if (isAISpeakingRef.current || interviewState !== 'running') return;
+    
+    setAIState('listening');
+    try {
+      speechRecognitionRef.current?.start();
+    } catch (e) {
+      console.warn("Speech recognition already started.", e);
     }
   }, [interviewState]);
 
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+  const handleAIResponse = useCallback(async () => {
+    if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].role !== 'user') return;
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
+    setAIState('thinking');
+    const aiText = await getAIResponse(chatHistory);
+    const cleanText = cleanTextForSpeech(aiText);
+    setChatHistory(prev => [...prev, { role: 'assistant', content: aiText }]);
     
-    recognition.onresult = (event: any) => {
-      const userText = event.results[0][0].transcript;
-      if (userText.trim()) {
-        setAIState('thinking');
-        setChatHistory(prev => [...prev, { role: 'user', content: userText }]);
-      }
-    };
-    
-    recognition.onerror = (event: any) => console.error("Speech recognition error:", event.error);
-    recognition.onend = () => {
-      if (interviewState === 'running' && !isAISpeakingRef.current && aiState === 'listening') {
-        startListening();
-      }
-    };
-
-    speechRecognitionRef.current = recognition;
-  }, [interviewState, aiState, startListening]);
-
-  useEffect(() => {
-    if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === 'user') {
-      const processAIResponse = async () => {
-        const aiText = await getAIResponse(chatHistory);
-        setChatHistory(prev => [...prev, { role: 'assistant', content: aiText }]);
-        try {
-          const audioUrl = await speakText(aiText);
-          if (audioPlayerRef.current) {
+    try {
+        const audioUrl = await speakText(cleanText);
+        if (audioPlayerRef.current) {
             isAISpeakingRef.current = true;
             audioPlayerRef.current.src = audioUrl;
             audioPlayerRef.current.play();
             setAIState('speaking');
-          }
-        } catch (error) {
-          console.error(error);
-          startListening();
         }
-      };
-      processAIResponse();
+    } catch (error) {
+        console.error("Error speaking text:", error);
+        isAISpeakingRef.current = false;
+        startListening();
     }
   }, [chatHistory, startListening]);
 
+  useEffect(() => {
+    handleAIResponse();
+  }, [handleAIResponse]);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        setPermissionError("Speech Recognition API is not supported in this browser.");
+        return;
+    }
+
+    const recognition = new SpeechRecognition();
+    // ✨ FIX: Use simpler, more reliable speech recognition settings
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+    speechRecognitionRef.current = recognition;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+        const userText = event.results[0][0].transcript;
+        if (userText.trim()) {
+            setChatHistory(prev => [...prev, { role: 'user', content: userText }]);
+        }
+    };
+    
+    recognition.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+    };
+
+    // ✨ FIX: Robust restart logic
+    recognition.onend = () => {
+        if (interviewState === 'running' && !isAISpeakingRef.current) {
+            startListening();
+        }
+    };
+  }, [interviewState, startListening]);
+  
   const startInterview = async () => {
     setIsInitializing(true);
+    setPermissionError(null);
     resetInterviewState();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      setMicStream(stream);
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      setMicStream(stream); // This will trigger the useEffect for the camera
 
-      const systemPrompt = `You are an expert HR interviewer...`;
-      const firstQuestion = `Hello, thanks for coming in...`;
-      const initialHistory: ChatMessage[] = [{ role: 'system', content: systemPrompt }, { role: 'assistant', content: firstQuestion }];
+      setInterviewState('running');
+      interviewTimerRef.current = window.setInterval(() => setTimeLeft(t => t > 0 ? t - 1 : 0), 1000);
+      
+      const systemPrompt = `You are an expert HR interviewer for a ${roleName} position. Ask relevant questions one at a time and keep responses concise.`;
+      const firstQuestion = `Hello, and welcome. We're interviewing for the ${roleName} role today. To start, could you tell me a bit about your relevant experience?`;
+      
+      const initialHistory: ChatMessage[] = [
+        { role: 'system', content: systemPrompt },
+        { role: 'assistant', content: firstQuestion }
+      ];
       setChatHistory(initialHistory);
 
-      interviewTimerRef.current = window.setInterval(() => setTimeLeft(t => t > 0 ? t - 1 : 0), 1000);
-      setInterviewState('running');
-      
-      setAIState('thinking');
-      const audioUrl = await speakText(firstQuestion);
+      const cleanText = cleanTextForSpeech(firstQuestion);
+      const audioUrl = await speakText(cleanText);
+
       if (audioPlayerRef.current) {
         isAISpeakingRef.current = true;
         audioPlayerRef.current.src = audioUrl;
         audioPlayerRef.current.play();
         setAIState('speaking');
       }
-    } catch (err) {
-      alert("Could not access camera/microphone. Please grant permissions and use an HTTPS connection.");
+    } catch (err: any) {
+      console.error("Error initializing interview:", err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setPermissionError("Permission Denied. Please allow camera and microphone access in your browser settings and refresh.");
+      } else {
+        setPermissionError("Could not access camera/microphone. Ensure they aren't used by another app.");
+      }
       resetInterviewState();
     } finally {
       setIsInitializing(false);
@@ -184,18 +223,20 @@ export function InterviewPanel({ role, onBack }: { role: string; onBack: () => v
     
     setInterviewState('ended');
     setAIState('thinking');
-    if (interviewTimerRef.current) clearInterval(interviewTimerRef.current);
-    speechRecognitionRef.current?.stop();
-    setMicStream(null);
+    cleanup();
 
-    const finalPrompt: ChatMessage[] = [
-      ...chatHistory,
-      { role: 'user', content: `The interview is over...` }
-    ];
-    const feedback = await getAIResponse(finalPrompt);
+    const finalPrompt = { role: 'user', content: `The interview is over. Please provide comprehensive feedback on my performance, including strengths, areas for improvement, and a score out of 10.` };
+    const finalHistory = [...chatHistory, finalPrompt];
+    const feedback = await getAIResponse(finalHistory);
+    
     setFinalFeedback(feedback);
     setAIState('idle');
-  }, [interviewState, chatHistory]);
+  }, [interviewState, chatHistory, cleanup]);
+
+  const handleAudioEnded = () => {
+      isAISpeakingRef.current = false;
+      startListening();
+  };
   
   const toggleMic = () => {
     if(micStream) {
@@ -221,9 +262,9 @@ export function InterviewPanel({ role, onBack }: { role: string; onBack: () => v
 
   return (
     <div className="flex items-center justify-center min-h-screen p-4">
-      <audio ref={audioPlayerRef} onEnded={startListening} />
+      <audio ref={audioPlayerRef} onEnded={handleAudioEnded} />
       <GlassCard className="w-full max-w-6xl p-6 md:p-8">
-        <div className="grid grid-cols-3 items-center mb-6">
+         <div className="grid grid-cols-3 items-center mb-6">
           <div className="justify-self-start">
             <motion.button onClick={onBack} className={`flex items-center gap-2 ${textSecondary} hover:${textColor} transition-colors`} whileHover={{ x: -4 }}>
               <ChevronLeft className="w-5 h-5" /> Change Role
@@ -241,6 +282,13 @@ export function InterviewPanel({ role, onBack }: { role: string; onBack: () => v
             {interviewState === 'ended' ? "Interview complete. Here is your feedback." : "The AI will ask you questions and analyze your responses."}
           </p>
         </div>
+
+        {permissionError && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-red-500/20 border border-red-500/30 text-red-300 p-4 rounded-lg mb-6 flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6" />
+            <p>{permissionError}</p>
+          </motion.div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="lg:order-2">
@@ -276,7 +324,7 @@ export function InterviewPanel({ role, onBack }: { role: string; onBack: () => v
             </GlassCard>
           </div>
         </div>
-        
+
         <div className="flex flex-wrap justify-center gap-4">
           {interviewState !== 'running' ? (
             <motion.button 
